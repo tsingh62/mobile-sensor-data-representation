@@ -1,1 +1,492 @@
+package example.com.multiplepage;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
+import android.os.AsyncTask;
+import android.os.Bundle;
+import android.support.v4.app.Fragment;
+import android.support.v7.app.AppCompatActivity;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+
+import org.apache.http.NameValuePair;
+import org.apache.http.message.BasicNameValuePair;
+
+public class MainActivity extends AppCompatActivity {
+
+    //stores light sensor value
+    static double sensorValue;
+    //stores accelerometer value
+    static double x_acc;
+    static double y_acc;
+    static double z_acc;
+    //stores magnetic field value
+    static double x_mag;
+    static double y_mag;
+    static double z_mag;
+
+    static LineGraphView graph;
+    static LineGraphView graph1;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+        if (savedInstanceState == null) {
+            getSupportFragmentManager().beginTransaction()
+                    .add(R.id.container, new PlaceholderFragment())
+                    .commit();
+        }
+
+        graph = new LineGraphView(getApplicationContext(), 100, Arrays.asList("x", "y", "z"));
+        graph.setVisibility(View.VISIBLE);
+
+        graph1 = new LineGraphView(getApplicationContext(), 100, Arrays.asList("x", "y", "z"));
+        graph1.setVisibility(View.VISIBLE);
+
+    }
+
+
+    /**
+     * A placeholder fragment containing a simple view.
+     */
+
+    public static class PlaceholderFragment extends Fragment {
+
+        public PlaceholderFragment() {
+        }
+
+        @Override
+        public View onCreateView(LayoutInflater inflater, ViewGroup container,
+                                 Bundle savedInstanceState) {
+
+    		/* method to replace label*/
+            View rootView = inflater.inflate(R.layout.fragment_main, container, false);
+            TextView tv = (TextView) rootView.findViewById(R.id.label1);
+            tv.setText("Sensor Reader\n===============");
+
+    		/* create TextView Object*/
+            TextView lightIntensity = new TextView(rootView.getContext());
+            TextView accelerometer = new TextView(rootView.getContext());
+            TextView magneticField = new TextView(rootView.getContext());
+            TextView tempVector = new TextView(rootView.getContext());
+            TextView proximityVector = new TextView(rootView.getContext());
+
+    		/*puts its contents in non-overlapping positions*/
+            LinearLayout layout = (LinearLayout) rootView.findViewById(R.id.layout1);
+
+    		/*stack all of the TextView objects vertically rather than horizontally*/
+            layout.setOrientation(LinearLayout.VERTICAL);
+
+    		/* add TextView Object to Layout*/
+            layout.addView(lightIntensity);
+            layout.addView(graph);
+            layout.addView(accelerometer);
+            layout.addView(graph1);
+            layout.addView(magneticField);
+            layout.addView(tempVector);
+            layout.addView(proximityVector);
+
+    		/*In your Activity request the sensor manager:*/
+            SensorManager sensorManager = (SensorManager) rootView.getContext().getSystemService(SENSOR_SERVICE);
+
+    		/* In your Activity request the different sensors */
+            Sensor lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT);
+            Sensor accelerometerSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+            Sensor fieldSensor = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
+            Sensor temp = sensorManager.getDefaultSensor(Sensor.TYPE_AMBIENT_TEMPERATURE);
+            Sensor prox = sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
+
+    		/*In your Activity create an instance of your new SensorEventListener and register it.*/
+            SensorEventListener lightSensorListener = new LightSensorEventListener(lightIntensity);
+            SensorEventListener accelerometerSensorListener = new AccelerometerEventListener(accelerometer);
+            SensorEventListener fieldSensorListener = new FieldEventListener(magneticField);
+            SensorEventListener roomtemp = new AmbientTemp(tempVector);
+            SensorEventListener proxread = new ProxiReader(proximityVector);
+
+            sensorManager.registerListener(lightSensorListener, lightSensor, SensorManager.SENSOR_DELAY_NORMAL);
+            sensorManager.registerListener(accelerometerSensorListener, accelerometerSensor, SensorManager.SENSOR_DELAY_NORMAL);
+            sensorManager.registerListener(fieldSensorListener, fieldSensor, SensorManager.SENSOR_DELAY_NORMAL);
+            sensorManager.registerListener(roomtemp, temp, SensorManager.SENSOR_DELAY_NORMAL);
+            sensorManager.registerListener(proxread, prox, SensorManager.SENSOR_DELAY_NORMAL);
+            return rootView;
+        }
+
+
+        class LightSensorEventListener implements SensorEventListener {
+            TextView output;
+            double record;
+
+            public LightSensorEventListener(TextView outputView) {
+                output = outputView;
+            }
+
+            public void onAccuracyChanged(Sensor s, int i) {
+            }
+
+            public void onSensorChanged(SensorEvent se) {
+                if (se.sensor.getType() == Sensor.TYPE_LIGHT) {
+                    sensorValue = (double) se.values[0];
+
+                    if (sensorValue > record)
+                        record = sensorValue;
+
+                    new MyTask().execute();
+
+                    String value = "===============";
+                    value += "\n---Light Intensity---";
+                    value += String.format("\nRecord Intensity: %.0f", record);
+                    value += String.format("\nReal-Time Intensity: %.0f", sensorValue);
+                    value += "\n===============";
+
+                    output.setText(value);
+                }
+            }
+        }
+
+        class AccelerometerEventListener implements SensorEventListener {
+            TextView output;
+            double[] record;
+
+            public AccelerometerEventListener(TextView outputView) {
+                output = outputView;
+                record = new double[3];
+            }
+
+            public void onAccuracyChanged(Sensor s, int i) {
+
+            }
+
+            public void onSensorChanged(SensorEvent se) {
+                if (se.sensor.getType() == Sensor.TYPE_ACCELEROMETER) {
+                    x_acc = (double) se.values[0];
+                    y_acc = (double) se.values[1];
+                    z_acc = (double) se.values[2];
+
+                    if (x_acc > record[0])
+                        record[0] = x_acc;
+
+                    if (y_acc > record[1])
+                        record[1] = y_acc;
+
+                    if (z_acc > record[2])
+                        record[2] = z_acc;
+
+                    graph.addPoint(se.values);
+                    new MyTask1().execute();
+                    String value = "---Accelerometer---";
+
+                    value += "\nRecord Values";
+                    value += String.format("\nX: %f", record[0]);
+                    value += String.format("\nY: %f", record[1]);
+                    value += String.format("\nZ: %f", record[2]);
+
+                    value += "\nReal-Time Values";
+                    value += String.format("\nX: %f", x_acc);
+                    value += String.format("\nY: %f", y_acc);
+                    value += String.format("\nZ: %f", z_acc);
+                    value += "\n===============";
+
+                    output.setText(value);
+                }
+            }
+        }
+
+        class FieldEventListener implements SensorEventListener {
+            TextView output;
+            double[] record;
+
+            public FieldEventListener(TextView outputView) {
+                output = outputView;
+                record = new double[3];
+            }
+
+            public void onAccuracyChanged(Sensor s, int i) {
+            }
+
+            public void onSensorChanged(SensorEvent se) {
+                if (se.sensor.getType() == Sensor.TYPE_MAGNETIC_FIELD) {
+                    x_mag = (double) se.values[0];
+                    y_mag = (double) se.values[1];
+                    z_mag = (double) se.values[2];
+
+                    if (x_mag > record[0])
+                        record[0] = x_mag;
+
+                    if (y_mag > record[1])
+                        record[1] = y_mag;
+
+                    if (z_mag > record[2])
+                        record[2] = z_mag;
+
+                    graph1.addPoint(se.values);
+                    new MyTask2().execute();
+                    String value = "---Magnetic Field---";
+
+                    value += "\nRecord Values";
+                    value += String.format("\nX: %f", record[0]);
+                    value += String.format("\nY: %f", record[1]);
+                    value += String.format("\nZ: %f", record[2]);
+
+                    value += "\nReal-Time Values";
+                    value += String.format("\nX: %f", x_mag);
+                    value += String.format("\nY: %f", y_mag);
+                    value += String.format("\nZ: %f", z_mag);
+                    value += "\n===============";
+
+                    output.setText(value);
+                }
+            }
+        }
+
+
+        class AmbientTemp implements SensorEventListener {
+            TextView output;
+            double record;
+
+            public AmbientTemp(TextView outputView) {
+                output = outputView;
+            }
+
+            public void onAccuracyChanged(Sensor s, int i) {
+
+            }
+
+            public void onSensorChanged(SensorEvent se) {
+                if (se.sensor.getType() == Sensor.TYPE_AMBIENT_TEMPERATURE) {
+                    double x = (double) se.values[0];
+
+                    if (x > record)
+                        record = x;
+
+                    String value = "---Ambient Temperature---";
+
+                    value += "\nRecord Values";
+                    value += String.format("\nX: %f", record);
+
+                    value += "\nReal-Time Values";
+                    value += String.format("\nX: %f", x);
+                    value += "\n===============";
+
+                    output.setText(value);
+                }
+            }
+        }
+
+        class ProxiReader implements SensorEventListener {
+            TextView output;
+            String x;
+
+            public ProxiReader(TextView outputView) {
+                output = outputView;
+            }
+
+            public void onAccuracyChanged(Sensor s, int i) {
+
+            }
+
+            public void onSensorChanged(SensorEvent se) {
+                if (se.sensor.getType() == Sensor.TYPE_PROXIMITY) {
+
+                    if (se.values[0] == 0)
+                        x = "NEAR";
+                    else
+                        x = "FAR";
+
+                    String value = "---Proximity Sensor---";
+
+                    value += "\nReal-Time Values";
+                    value += x;
+
+                    value += "\n===============";
+
+                    output.setText(value);
+                }
+            }
+        }
+
+        private class MyTask extends AsyncTask<Object, Object, Void> {
+
+            protected Void doInBackground(Object... params) {
+
+                System.out.println("Reaching @ validation");
+
+                ArrayList<NameValuePair> postParameters = new ArrayList<NameValuePair>();
+
+                postParameters.add(new BasicNameValuePair("sensorValue",Integer.toString((int) sensorValue)));
+                String response = null;
+
+                try {
+
+                    System.out.println("reaching @ httpconnection");
+
+                    response = CustomHttpClient.executeHttpPost("http://192.168.0.12/test/sensor.php", postParameters);  //Enter Your remote PHP,ASP, Servlet file link
+
+                    String res = response.toString();
+
+                    System.out.println("Here"+ response);
+
+
+
+                    System.out.println(res);
+
+                    res = res.replaceAll("\\s+", "");
+
+
+
+                    if (res.equals("1")) {
+
+
+
+
+                    }else {
+
+                        System.out.println("nothing");
+
+                    }
+
+                } catch (Exception e) {
+
+
+                    System.out.println(e);
+
+                }
+                return null;
+            }
+
+            @Override
+            protected void onPostExecute(Void result) {
+
+                    System.out.println("TASK DONE");
+            }
+        }
+
+        private class MyTask1 extends AsyncTask<Object, Object, Void> {
+
+            protected Void doInBackground(Object... params) {
+
+                System.out.println("Reaching @ validation");
+
+                ArrayList<NameValuePair> postParameters = new ArrayList<NameValuePair>();
+
+                postParameters.add(new BasicNameValuePair("x_acc",Double.toString( x_acc)));
+                postParameters.add(new BasicNameValuePair("y_acc",Double.toString( y_acc)));
+                postParameters.add(new BasicNameValuePair("z_acc",Double.toString( z_acc)));
+
+                System.out.println(postParameters);
+
+                String response = null;
+                try {
+
+                    System.out.println("reaching @ httpconnection");
+
+                    response = CustomHttpClient.executeHttpPost("http://192.168.0.12/test/acc.php", postParameters);  //Enter Your remote PHP,ASP, Servlet file link
+
+
+                    String res = response.toString();
+
+                    System.out.println("Here"+ response);
+
+
+
+                    System.out.println(res);
+
+                    res = res.replaceAll("\\s+", "");
+
+
+
+                    if (res.equals("1")) {
+
+
+
+
+                    }else {
+
+                        System.out.println("nothing");
+
+                    }
+
+                } catch (Exception e) {
+
+
+                    System.out.println(e);
+
+                }
+                return null;
+            }
+
+            @Override
+            protected void onPostExecute(Void result) {
+
+                System.out.println("ACC TASK DONE");
+            }
+        }
+
+        private class MyTask2 extends AsyncTask<Object, Object, Void> {
+
+            protected Void doInBackground(Object... params) {
+
+                System.out.println("Reaching @ validation");
+
+                ArrayList<NameValuePair> postParameters = new ArrayList<NameValuePair>();
+
+                postParameters.add(new BasicNameValuePair("x_mag",Double.toString( x_mag)));
+                postParameters.add(new BasicNameValuePair("y_mag",Double.toString( y_mag)));
+                postParameters.add(new BasicNameValuePair("z_mag",Double.toString( z_mag)));
+
+                String response = null;
+                try {
+
+                    System.out.println("reaching @ httpconnection");
+
+                    response = CustomHttpClient.executeHttpPost("http://192.168.0.12/test/mag.php", postParameters);  //Enter Your remote PHP,ASP, Servlet file link
+
+
+                    String res = response.toString();
+
+                    System.out.println("Here"+ response);
+
+
+
+                    System.out.println(res);
+
+                    res = res.replaceAll("\\s+", "");
+
+
+
+                    if (res.equals("1")) {
+
+
+
+
+                    }else {
+
+                        System.out.println("nothing");
+
+                    }
+
+                } catch (Exception e) {
+
+
+                    System.out.println(e);
+
+                }
+                return null;
+            }
+
+            @Override
+            protected void onPostExecute(Void result) {
+
+                System.out.println("MAG TASK DONE");
+            }
+        }
+    }
+}
